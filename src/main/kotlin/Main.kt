@@ -2,7 +2,13 @@ package org.example
 
 import dev.langchain4j.memory.chat.MessageWindowChatMemory
 import dev.langchain4j.model.openai.OpenAiChatModel
+import dev.langchain4j.model.openai.OpenAiEmbeddingModel
 import dev.langchain4j.service.AiServices
+import dev.langchain4j.store.embedding.EmbeddingStoreIngestor
+import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore
+import dev.langchain4j.data.segment.TextSegment
+import dev.langchain4j.rag.DefaultRetrievalAugmentor
+import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever
 import io.ktor.serialization.gson.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
@@ -19,14 +25,41 @@ fun main() {
     val model = OpenAiChatModel.builder()
         .apiKey(apiKey)
         .baseUrl("https://openrouter.ai/api/v1")
-        .modelName("deepseek/deepseek-r1")
+        //.modelName("deepseek/deepseek-r1")
+        .modelName("google/gemini-2.0-flash-001")
         .maxTokens(1000)
+        .build()
+
+    // 1. Initialize Vector Store and Embedding Model
+    val embeddingStore = InMemoryEmbeddingStore<TextSegment>()
+    val embeddingModel = OpenAiEmbeddingModel.builder()
+        .apiKey(apiKey)
+        .baseUrl("https://openrouter.ai/api/v1")
+        .modelName("text-embedding-3-small")
+        .build()
+    
+    // 2. Set up Ingestor
+    val ingestor = EmbeddingStoreIngestor.builder()
+        .embeddingStore(embeddingStore)
+        .embeddingModel(embeddingModel)
+        .build()
+
+    // 3. Set up Content Retriever for RAG
+    val contentRetriever = EmbeddingStoreContentRetriever.builder()
+        .embeddingStore(embeddingStore)
+        .embeddingModel(embeddingModel)
+        .maxResults(3)
+        .build()
+
+    val retrievalAugmentor = DefaultRetrievalAugmentor.builder()
+        .contentRetriever(contentRetriever)
         .build()
 
     val agent = AiServices.builder(BioResearchAgent::class.java)
         .chatLanguageModel(model)
         .chatMemory(MessageWindowChatMemory.withMaxMessages(10))
-        .tools(PubMedSearcher())
+        .tools(PubMedSearcher(ingestor))
+        .retrievalAugmentor(retrievalAugmentor)
         .build()
 
     embeddedServer(Netty, port = 8080) {

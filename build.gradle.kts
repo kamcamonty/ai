@@ -15,8 +15,9 @@ application {
 }
 
 dependencies {
-    implementation("dev.langchain4j:langchain4j-open-ai:0.35.0")
     implementation("dev.langchain4j:langchain4j:0.35.0")
+    implementation("dev.langchain4j:langchain4j-open-ai:0.35.0")
+    implementation("dev.langchain4j:langchain4j-embeddings-all-minilm-l6-v2-q:0.35.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.code.gson:gson:2.10.1")
     
