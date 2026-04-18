@@ -3,127 +3,172 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bio-Research Synthesis Agent</title>
+    <title>Bio-Research Agent | Ciklum AI Academy</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Inter', sans-serif;
             line-height: 1.6;
             color: #333;
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
-            padding: 20px;
-            background-color: #f4f7f6;
+            padding: 40px 20px;
+            background-color: #f8f9fa;
         }
-        h1 {
-            color: #2c3e50;
+        .header {
             text-align: center;
+            margin-bottom: 40px;
         }
+        .header h1 { color: #1a73e8; margin-bottom: 10px; }
+        .header p { color: #666; font-size: 0.9em; }
+
         .search-container {
-            display: flex;
-            gap: 10px;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
             margin-bottom: 30px;
         }
         input[type="text"] {
-            flex-grow: 1;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
             font-size: 16px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #1a73e8;
         }
         button {
-            padding: 12px 24px;
-            background-color: #3498db;
+            background: #1a73e8;
             color: white;
             border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s;
-        }
-        button:hover {
-            background-color: #2980b9;
-        }
-        button:disabled {
-            background-color: #bdc3c7;
-            cursor: not-allowed;
-        }
-        #results {
-            background-color: white;
-            padding: 20px;
+            padding: 12px 25px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            min-height: 100px;
-        }
-        .loading {
-            text-align: center;
-            color: #7f8c8d;
-            font-style: italic;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            text-align: left;
-            padding: 12px;
-            border-bottom: 1px solid #eee;
-        }
-        th {
-            background-color: #f8f9fa;
+            cursor: pointer;
             font-weight: 600;
+            margin-top: 15px;
+            width: 100%;
+            transition: background 0.3s;
+        }
+        button:hover { background: #1557b0; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+
+        /* Reasoning Trace Styling */
+        #reasoning-section {
+            display: none;
+            background: #f1f3f4;
+            border-left: 4px solid #1a73e8;
+            padding: 20px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 25px;
+        }
+        .section-title {
+            font-weight: 600;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #5f6368;
+            margin-bottom: 10px;
+            display: block;
+        }
+        #reasoning-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+            color: #3c4043;
+        }
+
+        /* Results Styling */
+        #result-container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            display: none;
+        }
+        table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; }
+
+        .loader {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            font-weight: 600;
+            color: #1a73e8;
         }
     </style>
 </head>
 <body>
-    <h1>Bio-Research Synthesis Agent</h1>
-    <div class="search-container">
-        <input type="text" id="query" placeholder="Enter a research question (e.g., How does Caffeine affect CYP1A2 expression?)" />
-        <button id="analyzeBtn">Analyze</button>
-    </div>
-    <div id="results">
-        <p style="text-align: center; color: #7f8c8d;">Enter a query above to start the synthesis.</p>
-    </div>
 
-    <script>
-        const queryInput = document.getElementById('query');
-        const analyzeBtn = document.getElementById('analyzeBtn');
-        const resultsDiv = document.getElementById('results');
+<div class="header">
+    <h1>Bio-Research Assistant</h1>
+    <p>Ciklum AI Academy Project | Agentic RAG with Self-Reflection</p>
+</div>
 
-        async function performAnalysis() {
-            const query = queryInput.value.trim();
-            if (!query) return;
+<div class="search-container">
+    <input type="text" id="queryInput" placeholder="Enter scientific query (e.g. Metformin AMPK HepG2 dosage)...">
+    <button id="searchBtn" onclick="performAnalysis()">Analyze Literature</button>
+    <div id="loader" class="loader">Agent is thinking and searching PubMed...</div>
+</div>
 
-            analyzeBtn.disabled = true;
-            resultsDiv.innerHTML = '<p class="loading">Searching PubMed and synthesizing results... (this may take a minute)</p>';
+<div id="reasoning-section">
+    <span class="section-title">Agent Reasoning & Reflection</span>
+    <div id="reasoning-text"></div>
+</div>
 
-            try {
-                const response = await fetch('/analyze', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ query: query })
-                });
+<div id="result-container">
+    <span class="section-title">Scientific Synthesis</span>
+    <div id="answer-content"></div>
+</div>
 
-                if (!response.ok) {
-                    throw new Error(`Server returned ${response.status}`);
-                }
+<script>
+    async function performAnalysis() {
+        const query = document.getElementById('queryInput').value;
+        const btn = document.getElementById('searchBtn');
+        const loader = document.getElementById('loader');
+        const reasoningSection = document.getElementById('reasoning-section');
+        const resultContainer = document.getElementById('result-container');
 
-                const data = await response.json();
-                resultsDiv.innerHTML = marked.parse(data.result);
-            } catch (error) {
-                resultsDiv.innerHTML = `<p style="color: #e74c3c;">Error: ${error.message}</p>`;
-            } finally {
-                analyzeBtn.disabled = false;
-            }
+        if (!query) return;
+
+        // UI State management
+        btn.disabled = true;
+        loader.style.display = 'block';
+        reasoningSection.style.display = 'none';
+        resultContainer.style.display = 'none';
+
+        try {
+            const response = await fetch('/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: query })
+            });
+
+            const data = await response.json();
+
+            // 1. Display Reasoning & Reflection
+            reasoningSection.style.display = 'block';
+            document.getElementById('reasoning-text').innerText =
+                `PLAN: ${data.reasoning}\n\nREFLECTION: ${data.reflection}`;
+
+            // 2. Display Rendered Markdown Answer
+            resultContainer.style.display = 'block';
+            document.getElementById('answer-content').innerHTML = marked.parse(data.answer);
+
+        } catch (error) {
+            console.error('Error:', error);
+            alert("Failed to reach the research agent.");
+        } finally {
+            btn.disabled = false;
+            loader.style.display = 'none';
         }
-
-        analyzeBtn.addEventListener('click', performAnalysis);
-        queryInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') performAnalysis();
-        });
-    </script>
+    }
+</script>
 </body>
 </html>
