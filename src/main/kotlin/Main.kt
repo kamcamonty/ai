@@ -41,6 +41,7 @@ fun main() {
         //.modelName("mistralai/mistral-7b-instruct:free")
         //.modelName("google/gemma-2-9b-it:free")
         .maxTokens(1000)
+        .temperature(0.0)
         .timeout(java.time.Duration.ofSeconds(60))
         .strictTools(true)
         .build()
@@ -64,6 +65,8 @@ fun main() {
         .embeddingStore(embeddingStore)
         .embeddingModel(embeddingModel)
         .build()
+
+    val searcher = PubMedSearcher(ingestor)
 
     // 3. Set up Content Retriever for RAG
     val contentRetriever = EmbeddingStoreContentRetriever.builder()
@@ -95,7 +98,11 @@ fun main() {
         routing {
             staticResources("/", "static", index = "index.html")
             post("/analyze") {
+
                 val request = call.receive(AnalyzeRequest::class)
+                searcher.reset()
+
+                embeddingStore.removeAll()
                 try {
                     // 1. Let the agent perform its full logic (Search -> Index -> Reflect)
                     val rawResult = agent.analyze(request.query)

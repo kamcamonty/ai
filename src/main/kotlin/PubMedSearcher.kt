@@ -11,141 +11,117 @@ import dev.langchain4j.data.document.splitter.DocumentSplitters
 
 class PubMedSearcher(private val ingestor: EmbeddingStoreIngestor? = null) {
     private val client = OkHttpClient()
+    private var isAlreadyIndexed = false
     private var turnCount = 0
-    private val MAX_TURNS = 3 //
+    private val MAX_TURNS = 3
 
-    @Tool("Downloads and indexes full-text research articles into the internal database")
+    @Tool("Downloads and indexes full-text research articles for multiple sources into internal memory")
     fun downloadAndIndex(@P("the research topic") topic: String): String {
+        // 1. Idempotency Guard: prevent re-indexing
+        if (isAlreadyIndexed) {
+            return "NOTICE: Full-text data is ALREADY in memory. Stop calling this tool and analyze your context now."
+        }
 
-        println("[DEBUG_LOG] Downloading and indexing full-text for topic: $topic")
+        println("[DEBUG_LOG] Method-focused indexing started for: $topic")
 
-        // 1. ESearch: get PMC IDs
-        val searchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term=${topic.replace(" ", "+")}&retmax=3&retmode=json"
-        val searchRequest = Request.Builder().url(searchUrl).build()
-
-        val ids = try {
-            client.newCall(searchRequest).execute().use { response ->
-                if (!response.isSuccessful) return "Error searching PMC: ${response.code}"
+        // 1. ESearch: Fetch top 3 IDs
+        val searchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term=${topic.replace(" ", "+")}+AND+(dosage+OR+concentration)&retmax=3&retmode=json"
+        val idList = try {
+            client.newCall(Request.Builder().url(searchUrl).build()).execute().use { response ->
                 val json = JsonParser.parseString(response.body?.string() ?: "{}").asJsonObject
-                val idList = json.getAsJsonObject("esearchresult").getAsJsonArray("idlist")
-                idList.map { it.asString }
+                json.getAsJsonObject("esearchresult").getAsJsonArray("idlist").map { it.asString }
             }
-        } catch (e: Exception) {
-            return "Error searching PMC: ${e.message}"
-        }
+        } catch (e: Exception) { return "Search failed: ${e.message}" }
 
-        if (ids.isEmpty()) return "No full-text articles found for topic: $topic in PMC"
+        if (idList.isEmpty()) return "No methodological full-text articles found for '$topic'."
 
-        // 2. EFetch: get full texts
-        val idsString = ids.joinToString(",")
-        val fetchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=$idsString&retmode=text"
+        val indexedLinks = mutableListOf<String>()
+        val splitter = DocumentSplitters.recursive(1000, 150)
 
-        val fullXml = client.newCall(Request.Builder().url(fetchUrl).build()).execute().use {
-            it.body?.string() ?: ""
-        }
+        // Key signal words for scoring
+        val highSignalUnits = listOf("nM", "μM", "uM", "mM", "mg/kg", "hours", "hrs", "duration")
+        val experimentalVerbs = listOf("treated with", "incubated", "supplemented", "administered")
 
-        // 3. CLEANING: Remove huge XML headers but KEEP the full body
-        val bodyStart = fullXml.indexOf("<body>")
-        val bodyEnd = fullXml.lastIndexOf("</body>")
+        idList.forEach { id ->
+            try {
+                val fetchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=$id&retmode=text"
+                val rawXml = client.newCall(Request.Builder().url(fetchUrl).build()).execute().use { it.body?.string() ?: "" }
 
-        val cleanBody = if (bodyStart != -1 && bodyEnd != -1) {
-            fullXml.substring(bodyStart, bodyEnd + 7)
-                .replace(Regex("<[^>]*>"), " ") // Strip tags so embeddings focus on science
-                .replace(Regex("\\s+"), " ")
-        } else {
-            fullXml.take(100000) // Fallback for very weird formats
-        }
+                val cleanText = when {
+                    rawXml.contains("<body>") -> rawXml.substringAfter("<body>").substringBefore("</body>")
+                    rawXml.contains("<abstract>") -> rawXml.substringAfter("<abstract>").substringBefore("</abstract>")
+                    else -> rawXml.take(15000)
+                }.replace(Regex("<[^>]*>"), " ").replace(Regex("\\s+"), " ").trim()
 
-        // 4. INGESTION: Pass the whole body.
-        // Your recursive splitter (1000/100) in main() will now slice this into
-        // hundreds of small, searchable pieces.
-        return if (ingestor != null) {
-            val doc = Document.from(cleanBody)
-            val splitter = DocumentSplitters.recursive(1000, 100)
-            val segments = splitter.split(doc)
+                if (cleanText.isNotBlank()) {
+                    val doc = Document.from(cleanText)
+                    val allSegments = splitter.split(doc)
 
-            val scientificKeywords = listOf("mM", "μM", "mg/", "concentration", "dose", "Methods", "treated with")
+                    // 2. SCORING FILTER: Prioritize chunks with units AND verbs
+                    val relevantSegments = allSegments.filter { seg ->
+                        val text = seg.text()
+                        highSignalUnits.any { unit -> text.contains(unit, ignoreCase = false) } ||
+                                text.contains("Materials and methods", ignoreCase = true)
+                    }.sortedByDescending { seg ->
+                        val text = seg.text()
+                        // Score +2 for units, +1 for verbs
+                        highSignalUnits.count { u -> text.contains(u) } * 2 +
+                                experimentalVerbs.count { v -> text.contains(v, ignoreCase = true) }
+                    }.take(15) // Take top 15 highest scoring segments per paper
 
-            val relevantSegments = segments.filter { segment ->
-                scientificKeywords.any { keyword -> segment.text().contains(keyword, ignoreCase = true) }
-            }
+                    relevantSegments.forEach { segment ->
+                        ingestor?.ingest(Document.from(segment.text()))
+                    }
 
-            println("[DEBUG_LOG] Filtered ${segments.size} chunks down to ${relevantSegments.size} high-signal chunks.")
-
-            relevantSegments.forEach { segment: dev.langchain4j.data.segment.TextSegment ->
-                try {
-                    ingestor.ingest(Document.from(segment.text()))
-                } catch (e: Exception) {
-                    println("Skipping failed segment: ${e.message}")
+                    indexedLinks.add("https://pmc.ncbi.nlm.nih.gov/articles/PMC$id/")
+                    println("[DEBUG_LOG] Indexed PMC$id with ${relevantSegments.size} signal-rich segments")
                 }
-            }
-            "Successfully indexed ${relevantSegments.size} key sections from the research for $topic. " +
-                    "Data involving concentrations and methods is now in internal memory. Provide your FINAL ANSWER now."
-        } else {
-            "Ingestor error."
+            } catch (e: Exception) { println("[ERROR] PMC$id failed") }
         }
+
+        isAlreadyIndexed = true
+        return "SUCCESS: ${indexedLinks.size} articles indexed. LINKS: ${indexedLinks.joinToString(", ")}. " +
+                "CRITICAL: Data is now in memory. Find the numeric concentrations and treatment times. Provide the FINAL ANSWER table now."
     }
 
-    @Tool("Search PMC for the beginning of the paper body to identify experimental setups")
+    @Tool("Search PMC for body snippets to find candidate IDs")
     fun searchPubMed(@P("the research query") query: String): String {
+        if (isAlreadyIndexed) {
+            return "STOP: Database is already populated. Analyze the current context for the answer."
+        }
+
         turnCount++
-        if (turnCount > MAX_TURNS) throw RuntimeException("STOP_LOOP: Maximum research steps reached.")
+        if (turnCount > MAX_TURNS) return "LIMIT: Research turns exhausted. Synthesize FINAL ANSWER from current memory."
 
-        println("[DEBUG_LOG] Searching PMC for body content: $query")
+        println("[DEBUG_LOG] Searching PMC for snippets: $query")
 
-        // 1. ESearch: Get PMC IDs
-        val searchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term=${query.replace(" ", "+")}&retmax=2&retmode=json"
-        val searchRequest = Request.Builder().url(searchUrl).build()
+        // Add methodology bias to the query
+        val searchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term=${query.replace(" ", "+")}+AND+(dosage+OR+concentration)&retmax=3&retmode=json"
 
         val ids = try {
-            client.newCall(searchRequest).execute().use { response ->
-                if (!response.isSuccessful) return "Error searching PMC: ${response.code}"
+            client.newCall(Request.Builder().url(searchUrl).build()).execute().use { response ->
                 val json = JsonParser.parseString(response.body?.string() ?: "{}").asJsonObject
-                val idList = json.getAsJsonObject("esearchresult").getAsJsonArray("idlist")
-                idList.map { it.asString }
+                json.getAsJsonObject("esearchresult").getAsJsonArray("idlist").map { it.asString }
             }
-        } catch (e: Exception) {
-            return "Error searching PMC: ${e.message}"
-        }
+        } catch (e: Exception) { return "Search failed" }
 
-        if (ids.isEmpty()) return "No full-text articles found in PMC for query: $query"
+        if (ids.isEmpty()) return "No relevant papers found for that specific query."
 
-        // 2. EFetch: Get Full XML but surgically extract the Body
-        val idsString = ids.joinToString(",")
-        val fetchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=$idsString&retmode=text"
-        val fetchRequest = Request.Builder().url(fetchUrl).build()
+        val fetchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=${ids.joinToString(",")}&retmode=text"
+        val rawContent = client.newCall(Request.Builder().url(fetchUrl).build()).execute().use { it.body?.string() ?: "" }
 
-        val rawContent = try {
-            client.newCall(fetchRequest).execute().use { response ->
-                if (!response.isSuccessful) return "Error fetching full texts: ${response.code}"
-                response.body?.string() ?: ""
-            }
-        } catch (e: Exception) {
-            return "Error fetching full texts: ${e.message}"
-        }
-
-        // 3. SURGICAL EXTRACTION: Ignore <front> (authors/metadata) and grab <body>
         val bodySnippet = when {
-            rawContent.contains("<body>") -> {
-                rawContent.substringAfter("<body>").substringBefore("</body>")
-            }
-            rawContent.contains("<abstract>") -> {
-                rawContent.substringAfter("<abstract>").substringBefore("</abstract>")
-            }
-            else -> {
-                // ULTIMATE FALLBACK: If no tags found, just strip XML and take the first 5000 chars
-                rawContent.take(5000)
-            }
-        }.replace(Regex("<[^>]*>"), " ") // Strip all remaining XML tags
-            .replace(Regex("\\s+"), " ")    // Clean up whitespace
-            .trim()
+            rawContent.contains("<body>") -> rawContent.substringAfter("<body>").substringBefore("</body>")
+            rawContent.contains("<abstract>") -> rawContent.substringAfter("<abstract>").substringBefore("</abstract>")
+            else -> rawContent.take(5000)
+        }.replace(Regex("<[^>]*>"), " ").trim().take(1500)
 
-        // 4. Return the IDs and the clean Body snippet
-        // This goes into the Agent's Chat Memory
-        return "Results for $query:\n\n" +
-                "Found IDs: ${ids.joinToString(", ")}\n" +
-                "Body Snippet: $bodySnippet...\n\n" +
-                "--- ACTION: If this snippet looks relevant but lacks specific dosages, " +
-                "call 'downloadAndIndex' once to perform a deep Vector RAG search on the full paper. Do not search again"
+        return "IDs Found: ${ids.joinToString(", ")}\nSnippet: $bodySnippet...\n" +
+                "INSTRUCTION: If dosage is unclear, call 'downloadAndIndex' for these IDs."
+    }
+
+    fun reset() {
+        this.turnCount = 0
+        this.isAlreadyIndexed = false
     }
 }
