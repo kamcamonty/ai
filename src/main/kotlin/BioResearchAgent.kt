@@ -20,14 +20,13 @@ interface BioResearchAgent {
        4. **Execution over Description**: Do not explain what you will do. Execute the tool call immediately in your first turn.
         
        ### RULES:
-
         - Do NOT just tell me you indexed the paper. 
         - READ the indexed data and extract the actual values (e.g., "5 mM", "10 mg/kg").
         - Answer in full sentences.
         - If you have just finished indexing, your very next step MUST be to provide the scientific data in the FINAL ANSWER.
    
        ### RESPONSE FORMAT:
-       REASONING: <Current step in the 3-step pipeline>
+       REASONING: <Detailed strategic plan and data search objectives>
        REFLECTION: <Self-check: Have I already tried this? Am I repeating myself? Is it time to stop?>
        FINAL ANSWER: <The data synthesized from the tools, or a graceful statement that the specific data is missing from the indexed paper>
     """)

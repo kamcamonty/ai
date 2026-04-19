@@ -1,9 +1,9 @@
 package org.example
 
+import ch.qos.logback.classic.Level
 import dev.langchain4j.data.document.splitter.DocumentSplitters
 import dev.langchain4j.memory.chat.MessageWindowChatMemory
 import dev.langchain4j.model.openai.OpenAiChatModel
-import dev.langchain4j.model.openai.OpenAiEmbeddingModel
 import dev.langchain4j.service.AiServices
 import dev.langchain4j.store.embedding.EmbeddingStoreIngestor
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore
@@ -20,8 +20,12 @@ import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import org.slf4j.LoggerFactory
+import ch.qos.logback.classic.Logger
 
 fun main() {
+    (LoggerFactory.getLogger("dev.langchain4j.store.embedding.EmbeddingStoreIngestor") as Logger).level = Level.INFO
+
     val apiKey = System.getenv("OPENROUTER_API_KEY") ?: "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"
     
     val model = OpenAiChatModel.builder()

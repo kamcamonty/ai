@@ -125,23 +125,20 @@ class PubMedSearcher(private val ingestor: EmbeddingStoreIngestor? = null) {
         }
 
         // 3. SURGICAL EXTRACTION: Ignore <front> (authors/metadata) and grab <body>
-        val bodySnippet = if (rawContent.contains("<body>")) {
-            rawContent.substringAfter("<body>")
-                .substringBefore("</body>")
-                .replace(Regex("<[^>]*>"), " ") // Strip all XML tags
-                .replace(Regex("\\s+"), " ")    // Collapse whitespace
-                .trim()
-                .take(2500) // Keep it small to save tokens for the LLM
-        } else if (rawContent.contains("<abstract>")) {
-            // Fallback to abstract if body is missing in the XML structure
-            rawContent.substringAfter("<abstract>")
-                .substringBefore("</abstract>")
-                .replace(Regex("<[^>]*>"), " ")
-                .trim()
-                .take(1000)
-        } else {
-            "Full text body not found in XML structure."
-        }
+        val bodySnippet = when {
+            rawContent.contains("<body>") -> {
+                rawContent.substringAfter("<body>").substringBefore("</body>")
+            }
+            rawContent.contains("<abstract>") -> {
+                rawContent.substringAfter("<abstract>").substringBefore("</abstract>")
+            }
+            else -> {
+                // ULTIMATE FALLBACK: If no tags found, just strip XML and take the first 5000 chars
+                rawContent.take(5000)
+            }
+        }.replace(Regex("<[^>]*>"), " ") // Strip all remaining XML tags
+            .replace(Regex("\\s+"), " ")    // Clean up whitespace
+            .trim()
 
         // 4. Return the IDs and the clean Body snippet
         // This goes into the Agent's Chat Memory
