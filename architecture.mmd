@@ -1,0 +1,15 @@
+graph TD
+    User((Researcher)) -->|Inputs Query| GUI[Web Dashboard]
+    GUI -->|POST Request| Ktor[Ktor Web Server]
+    Ktor -->|Invoke| Agent[Bio-Research Agent]
+
+    subgraph Agentic_Loop [Agentic RAG Cycle]
+        Agent -->|1. Search| Tool_S[searchPubMed]
+        Agent -->|2. Index| Tool_D[downloadAndIndex]
+        Tool_D -->|Weighted Filtering| VectorStore[(InMemory Vector Store)]
+        Agent -->|3. Reflect| RAG[Retrieval Augmentor]
+    end
+
+    Synthesis[Final Synthesis] -->|JSON Response| Ktor
+    Ktor -->|Render Results| GUI
+    GUI -->|Display Reasoning & Table| User

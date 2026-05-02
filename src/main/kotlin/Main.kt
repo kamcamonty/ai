@@ -26,7 +26,7 @@ import ch.qos.logback.classic.Logger
 fun main() {
     (LoggerFactory.getLogger("dev.langchain4j.store.embedding.EmbeddingStoreIngestor") as Logger).level = Level.INFO
 
-    val apiKey = System.getenv("OPENROUTER_API_KEY") ?: "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"
+    val apiKey = System.getenv("OPENROUTER_API_KEY") ?: "demo"
     
     val model = OpenAiChatModel.builder()
         .apiKey(apiKey)
@@ -37,9 +37,14 @@ fun main() {
         //.modelName("google/gemma-2-9b-it:free")
         //.modelName("google/gemma-4-26b-a4b-it:free")
         //.modelName("meta-llama/llama-3.3-70b-instruct:free")
-        .modelName("openrouter/elephant-alpha")
+        //.modelName("openrouter/elephant-alpha")
         //.modelName("mistralai/mistral-7b-instruct:free")
-        //.modelName("google/gemma-2-9b-it:free")
+        //.modelName("meta-llama/llama-3.3-70b-instruct:free")
+        //.modelName("gpt-4o")
+        //.modelName("inclusionai/ling-2.6-flash:free")
+        //.modelName("openrouter/auto:free")
+        .modelName("openai/gpt-oss-120b:free")
+
         .maxTokens(1000)
         .temperature(0.0)
         .timeout(java.time.Duration.ofSeconds(60))
