@@ -8,6 +8,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import com.google.gson.JsonParser
 import dev.langchain4j.data.document.splitter.DocumentSplitters
+import org.jsoup.Jsoup
+import org.jsoup.parser.Parser
 
 class PubMedSearcher(private val ingestor: EmbeddingStoreIngestor? = null) {
     private val client = OkHttpClient()
@@ -47,11 +49,8 @@ class PubMedSearcher(private val ingestor: EmbeddingStoreIngestor? = null) {
                 val fetchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=$id&retmode=text"
                 val rawXml = client.newCall(Request.Builder().url(fetchUrl).build()).execute().use { it.body?.string() ?: "" }
 
-                val cleanText = when {
-                    rawXml.contains("<body>") -> rawXml.substringAfter("<body>").substringBefore("</body>")
-                    rawXml.contains("<abstract>") -> rawXml.substringAfter("<abstract>").substringBefore("</abstract>")
-                    else -> rawXml.take(15000)
-                }.replace(Regex("<[^>]*>"), " ").replace(Regex("\\s+"), " ").trim()
+                val docJsoup = Jsoup.parse(rawXml, "", Parser.xmlParser())
+                val cleanText = (docJsoup.select("body").first() ?: docJsoup.select("abstract").first() ?: docJsoup).text()
 
                 if (cleanText.isNotBlank()) {
                     val doc = Document.from(cleanText)
@@ -110,11 +109,8 @@ class PubMedSearcher(private val ingestor: EmbeddingStoreIngestor? = null) {
         val fetchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=${ids.joinToString(",")}&retmode=text"
         val rawContent = client.newCall(Request.Builder().url(fetchUrl).build()).execute().use { it.body?.string() ?: "" }
 
-        val bodySnippet = when {
-            rawContent.contains("<body>") -> rawContent.substringAfter("<body>").substringBefore("</body>")
-            rawContent.contains("<abstract>") -> rawContent.substringAfter("<abstract>").substringBefore("</abstract>")
-            else -> rawContent.take(5000)
-        }.replace(Regex("<[^>]*>"), " ").trim().take(Config.pubMedSnippetSize)
+        val docJsoup = Jsoup.parse(rawContent, "", Parser.xmlParser())
+        val bodySnippet = (docJsoup.select("body").first() ?: docJsoup.select("abstract").first() ?: docJsoup).text().take(Config.pubMedSnippetSize)
 
         return "IDs Found: ${ids.joinToString(", ")}\nSnippet: $bodySnippet...\n" +
                 "INSTRUCTION: If dosage is unclear, call 'downloadAndIndex' for these IDs."
