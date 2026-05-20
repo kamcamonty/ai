@@ -8,18 +8,18 @@ object Config {
     private val config = YamlConfigLoader().load("application.yml")
 
     private fun getString(path: String, envName: String): String {
-        return System.getenv(envName) ?: config.propertyOrNull(path)?.getString() ?: ""
+        return System.getenv(envName) ?: config!!.propertyOrNull(path)?.getString() ?: ""
     }
 
     private fun getInt(path: String, envName: String, default: Int): Int {
         return System.getenv(envName)?.toIntOrNull() 
-            ?: config.propertyOrNull(path)?.getString()?.toIntOrNull() 
+            ?: config!!.propertyOrNull(path)?.getString()?.toIntOrNull() 
             ?: default
     }
 
     private fun getDouble(path: String, envName: String, default: Double): Double {
         return System.getenv(envName)?.toDoubleOrNull() 
-            ?: config.propertyOrNull(path)?.getString()?.toDoubleOrNull() 
+            ?: config!!.propertyOrNull(path)?.getString()?.toDoubleOrNull() 
             ?: default
     }
 
