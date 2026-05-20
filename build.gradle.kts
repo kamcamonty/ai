@@ -27,6 +27,7 @@ dependencies {
     implementation("io.ktor:ktor-server-netty-jvm:$ktorVersion")
     implementation("io.ktor:ktor-server-content-negotiation-jvm:$ktorVersion")
     implementation("io.ktor:ktor-serialization-gson-jvm:$ktorVersion")
+    implementation("io.ktor:ktor-server-config-yaml:$ktorVersion")
     implementation("ch.qos.logback:logback-classic:1.4.14")
 
     testImplementation(kotlin("test"))

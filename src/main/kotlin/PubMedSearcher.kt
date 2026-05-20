@@ -13,7 +13,7 @@ class PubMedSearcher(private val ingestor: EmbeddingStoreIngestor? = null) {
     private val client = OkHttpClient()
     private var isAlreadyIndexed = false
     private var turnCount = 0
-    private val MAX_TURNS = 3
+    private val MAX_TURNS = Config.pubMedMaxTurns
 
     @Tool("Downloads and indexes full-text research articles for multiple sources into internal memory")
     fun downloadAndIndex(@P("the research topic") topic: String): String {
@@ -24,8 +24,8 @@ class PubMedSearcher(private val ingestor: EmbeddingStoreIngestor? = null) {
 
         println("[DEBUG_LOG] Method-focused indexing started for: $topic")
 
-        // 1. ESearch: Fetch top 3 IDs
-        val searchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term=${topic.replace(" ", "+")}+AND+(dosage+OR+concentration)&retmax=3&retmode=json"
+        // 1. ESearch: Fetch top IDs
+        val searchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term=${topic.replace(" ", "+")}+AND+(dosage+OR+concentration)&retmax=${Config.pubMedRetMax}&retmode=json"
         val idList = try {
             client.newCall(Request.Builder().url(searchUrl).build()).execute().use { response ->
                 val json = JsonParser.parseString(response.body?.string() ?: "{}").asJsonObject
@@ -36,7 +36,7 @@ class PubMedSearcher(private val ingestor: EmbeddingStoreIngestor? = null) {
         if (idList.isEmpty()) return "No methodological full-text articles found for '$topic'."
 
         val indexedLinks = mutableListOf<String>()
-        val splitter = DocumentSplitters.recursive(1000, 150)
+        val splitter = DocumentSplitters.recursive(Config.chunkSize, Config.chunkOverlap)
 
         // Key signal words for scoring
         val highSignalUnits = listOf("nM", "μM", "uM", "mM", "mg/kg", "hours", "hrs", "duration")
@@ -96,7 +96,7 @@ class PubMedSearcher(private val ingestor: EmbeddingStoreIngestor? = null) {
         println("[DEBUG_LOG] Searching PMC for snippets: $query")
 
         // Add methodology bias to the query
-        val searchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term=${query.replace(" ", "+")}+AND+(dosage+OR+concentration)&retmax=3&retmode=json"
+        val searchUrl = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term=${query.replace(" ", "+")}+AND+(dosage+OR+concentration)&retmax=${Config.pubMedRetMax}&retmode=json"
 
         val ids = try {
             client.newCall(Request.Builder().url(searchUrl).build()).execute().use { response ->
@@ -114,7 +114,7 @@ class PubMedSearcher(private val ingestor: EmbeddingStoreIngestor? = null) {
             rawContent.contains("<body>") -> rawContent.substringAfter("<body>").substringBefore("</body>")
             rawContent.contains("<abstract>") -> rawContent.substringAfter("<abstract>").substringBefore("</abstract>")
             else -> rawContent.take(5000)
-        }.replace(Regex("<[^>]*>"), " ").trim().take(1500)
+        }.replace(Regex("<[^>]*>"), " ").trim().take(Config.pubMedSnippetSize)
 
         return "IDs Found: ${ids.joinToString(", ")}\nSnippet: $bodySnippet...\n" +
                 "INSTRUCTION: If dosage is unclear, call 'downloadAndIndex' for these IDs."

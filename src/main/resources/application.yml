@@ -1,0 +1,21 @@
+server:
+  port: 8080
+
+llm:
+  apiKey: "demo"
+  baseUrl: "https://openrouter.ai/api/v1"
+  modelName: "openai/gpt-oss-120b:free"
+  maxTokens: 1000
+  temperature: 0.0
+  timeoutSeconds: 60
+
+rag:
+  chunkSize: 1000
+  chunkOverlap: 100
+  maxResults: 2
+  minScore: 0.4
+
+pubmed:
+  retMax: 3
+  maxTurns: 3
+  snippetSize: 1500

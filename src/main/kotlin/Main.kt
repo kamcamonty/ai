@@ -26,46 +26,26 @@ import ch.qos.logback.classic.Logger
 fun main() {
     (LoggerFactory.getLogger("dev.langchain4j.store.embedding.EmbeddingStoreIngestor") as Logger).level = Level.INFO
 
-    val apiKey = System.getenv("OPENROUTER_API_KEY") ?: "demo"
-    
     val model = OpenAiChatModel.builder()
-        .apiKey(apiKey)
-        .baseUrl("https://openrouter.ai/api/v1")
-        //.modelName("deepseek/deepseek-r1")
-        //.modelName("google/gemini-2.0-flash-001")
-        //.modelName("openrouter/auto:free")
-        //.modelName("google/gemma-2-9b-it:free")
-        //.modelName("google/gemma-4-26b-a4b-it:free")
-        //.modelName("meta-llama/llama-3.3-70b-instruct:free")
-        //.modelName("openrouter/elephant-alpha")
-        //.modelName("mistralai/mistral-7b-instruct:free")
-        //.modelName("meta-llama/llama-3.3-70b-instruct:free")
-        //.modelName("gpt-4o")
-        //.modelName("inclusionai/ling-2.6-flash:free")
-        //.modelName("openrouter/auto:free")
-        .modelName("openai/gpt-oss-120b:free")
-
-        .maxTokens(1000)
-        .temperature(0.0)
-        .timeout(java.time.Duration.ofSeconds(60))
+        .apiKey(Config.openRouterApiKey)
+        .baseUrl(Config.openRouterBaseUrl)
+        .modelName(Config.modelName)
+        .maxTokens(Config.maxTokens)
+        .temperature(Config.temperature)
+        .timeout(Config.timeout)
         .strictTools(true)
         .build()
 
     // 1. Initialize Vector Store and Embedding Model
     val embeddingStore = InMemoryEmbeddingStore<TextSegment>()
     val embeddingModel = AllMiniLmL6V2QuantizedEmbeddingModel()
-//        .builder()
-//        .apiKey(apiKey)
-//        .baseUrl("https://openrouter.ai/api/v1")
-//        .modelName("text-embedding-3-small")
-//        .build()
     
     // 2. Set up Ingestor
     val ingestor = EmbeddingStoreIngestor.builder()
         .documentSplitter(
             DocumentSplitters.recursive(
-            1000, // Chunk size: ~250 words
-            100   // Overlap: 25 words to keep context between chunks
+            Config.chunkSize,
+            Config.chunkOverlap
         ))
         .embeddingStore(embeddingStore)
         .embeddingModel(embeddingModel)
@@ -77,8 +57,8 @@ fun main() {
     val contentRetriever = EmbeddingStoreContentRetriever.builder()
         .embeddingStore(embeddingStore)
         .embeddingModel(embeddingModel)
-        .maxResults(2)
-        .minScore(0.4)
+        .maxResults(Config.maxResults)
+        .minScore(Config.minScore)
         .build()
 
     val retrievalAugmentor = DefaultRetrievalAugmentor.builder()
@@ -93,7 +73,7 @@ fun main() {
         .retrievalAugmentor(retrievalAugmentor)
         .build()
 
-    embeddedServer(Netty, port = 8080) {
+    embeddedServer(Netty, port = Config.serverPort) {
         install(ContentNegotiation) {
             gson {
                 setPrettyPrinting()

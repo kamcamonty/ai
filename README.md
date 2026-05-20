@@ -9,7 +9,9 @@ Markdown
 3. Click Create Key, give it a name, and copy the string (it should start with sk-or-v1-).
 
 ### 2. Configure Environment Variables
-The application reads the key from your system environment for security.
+The application reads settings from `src/main/resources/application.yml`. You can also override these using system environment variables.
+
+For the API key, you can set it in the YAML file or via environment:
 
 - **macOS / Linux:**
   ```bash
