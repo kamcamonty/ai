@@ -1,25 +1,45 @@
 package org.example
 
 import io.ktor.server.config.*
-import io.ktor.server.config.yaml.*
 import java.time.Duration
+import java.io.InputStream
+import org.yaml.snakeyaml.Yaml
 
 object Config {
-    private val config = YamlConfigLoader().load("application.yml")
+    private val config: Map<String, Any>? = try {
+        val inputStream: InputStream? = javaClass.classLoader.getResourceAsStream("application.yml")
+        if (inputStream != null) {
+            Yaml().load<Map<String, Any>>(inputStream)
+        } else {
+            null
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun getNestedValue(map: Map<String, Any>?, path: String): String? {
+        var current: Any? = map
+        val keys = path.split(".")
+        for (key in keys) {
+            if (current !is Map<*, *>) return null
+            current = current[key]
+        }
+        return current?.toString()
+    }
 
     private fun getString(path: String, envName: String): String {
-        return System.getenv(envName) ?: config!!.propertyOrNull(path)?.getString() ?: ""
+        return System.getenv(envName) ?: getNestedValue(config, path) ?: ""
     }
 
     private fun getInt(path: String, envName: String, default: Int): Int {
         return System.getenv(envName)?.toIntOrNull() 
-            ?: config!!.propertyOrNull(path)?.getString()?.toIntOrNull() 
+            ?: getNestedValue(config, path)?.toIntOrNull() 
             ?: default
     }
 
     private fun getDouble(path: String, envName: String, default: Double): Double {
         return System.getenv(envName)?.toDoubleOrNull() 
-            ?: config!!.propertyOrNull(path)?.getString()?.toDoubleOrNull() 
+            ?: getNestedValue(config, path)?.toDoubleOrNull() 
             ?: default
     }
 
