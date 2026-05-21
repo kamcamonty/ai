@@ -11,8 +11,10 @@ import dev.langchain4j.data.document.splitter.DocumentSplitters
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 
-class PubMedSearcher(private val ingestor: EmbeddingStoreIngestor? = null) {
-    private val client = OkHttpClient()
+class PubMedSearcher(
+    private val ingestor: EmbeddingStoreIngestor? = null,
+    private val client: OkHttpClient = OkHttpClient()
+) {
     private var isAlreadyIndexed = false
     private var turnCount = 0
     private val MAX_TURNS = Config.pubMedMaxTurns
@@ -114,10 +116,5 @@ class PubMedSearcher(private val ingestor: EmbeddingStoreIngestor? = null) {
 
         return "IDs Found: ${ids.joinToString(", ")}\nSnippet: $bodySnippet...\n" +
                 "INSTRUCTION: If dosage is unclear, call 'downloadAndIndex' for these IDs."
-    }
-
-    fun reset() {
-        this.turnCount = 0
-        this.isAlreadyIndexed = false
     }
 }
